@@ -1,0 +1,1 @@
+Dataset verifier belum disertakan. Tempatkan gambar asli berlabel ke folder train/val/test sesuai backend/scripts/README.md. Jangan menaruh file placeholder atau mencampur data test ke training.

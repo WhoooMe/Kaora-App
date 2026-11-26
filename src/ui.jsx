@@ -31,6 +31,7 @@ export const Icon = ({ n, s = 18 }) => (
     <path d={P[n]} />
   </svg>
 );
+
 export const Badge = ({ c = "ok", children }) => (
   <span className={"badge b-" + c}>{children}</span>
 );
@@ -40,7 +41,7 @@ export const Card = ({ className = "", children, ...r }) => (
   </section>
 );
 export const Legend = () => (
-  <div className="leg">
+  <div className="leg maturity-legend">
     {[...ORDER].reverse().map((c) => (
       <span key={c}>
         <i style={{ background: C[c] }} />

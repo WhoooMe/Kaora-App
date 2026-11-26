@@ -1,0 +1,250 @@
+from __future__ import annotations
+
+import base64
+import hashlib
+import hmac
+import json
+import os
+import time
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any
+
+from PIL import Image
+
+from .cocoa_verifier import CocoaVerifier
+from .maturity_classifier import MaturityClassifier
+from .config import get_model_dir, get_verification_secret, get_verification_ttl_seconds
+
+MATURITY_CLASS_MAP = {
+    0: "Immature",
+    1: "Mature",
+    2: "Overmature",
+}
+
+MATURITY_LABEL_ID = {
+    "Immature": "Belum matang",
+    "Mature": "Matang",
+    "Overmature": "Lewat matang",
+}
+
+
+@dataclass(frozen=True)
+class RuntimeStatus:
+    api: str = "ready"
+    cocoa_verifier: bool = False
+    resnet18: bool = False
+    efficientnet_b0: bool = False
+    ensemble: bool = False
+    localizer: bool = False
+
+    @property
+    def verifier(self) -> bool:
+        return self.cocoa_verifier
+
+    @property
+    def maturity_classifier(self) -> bool:
+        return self.resnet18 or self.efficientnet_b0 or self.ensemble
+
+    @property
+    def localization(self) -> bool:
+        return self.localizer
+
+    @property
+    def ready_for_calibration(self) -> bool:
+        return self.cocoa_verifier
+
+    @property
+    def ready_for_detection(self) -> bool:
+        # Requires both a ready verifier and at least one loaded maturity classifier.
+        return self.cocoa_verifier and self.maturity_classifier
+
+    def to_dict(self) -> dict[str, Any]:
+        result = asdict(self)
+        result["verifier"] = self.verifier
+        result["maturity_classifier"] = self.maturity_classifier
+        result["localization"] = self.localization
+        result["ready_for_calibration"] = self.ready_for_calibration
+        result["ready_for_detection"] = self.ready_for_detection
+        return result
+
+
+class ModelRuntime:
+    """Loads optional AI models from KAORA_MODEL_DIR and reports readiness only after warm-up."""
+
+    def __init__(self) -> None:
+        self.model_dir: Path = get_model_dir()
+        self.verifier: CocoaVerifier | None = None
+        self.verifier_error: str | None = None
+
+        # Maturity model slots (ResNet18 + EfficientNet-B0 + Weighted Soft Voting)
+        self.resnet18_model: Any = None
+        self.efficientnet_b0_model: Any = None
+        self.resnet18_error: str | None = None
+        self.efficientnet_b0_error: str | None = None
+        self.ensemble_weights: dict[str, float] = {"resnet18": 0.5, "efficientnet_b0": 0.5}
+
+        self._load_verifier()
+        self._discover_maturity_checkpoints()
+
+    def _verifier_checkpoint_path(self) -> Path:
+  	override = os.getenv("COCOA_VERIFIER_CHECKPOINT")
+
+    	if override:
+       		return Path(override).expanduser().resolve()
+
+    	candidates = [
+        	self.model_dir / "mobilenetv3_verifier.pth",
+        	self.model_dir / "cocoa_verifier" / "mobilenetv3_small_best.pth",
+        	self.model_dir / "cocoa_verifier" / "mobilenetv3_verifier.pth",
+        	self.model_dir / "cocoa_verifier_mobilenet_v3_small.pth",
+    ]
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+
+    # Kembalikan lokasi default agar pesan error tetap informatif.
+    return candidates[0]
+
+    def _load_verifier(self) -> None:
+        checkpoint_path = self._verifier_checkpoint_path()
+        if not checkpoint_path.is_file():
+            self.verifier = None
+            self.verifier_error = "Checkpoint verifier belum ditemukan."
+            return
+
+        try:
+            threshold_raw = os.getenv("COCOA_VERIFIER_THRESHOLD")
+            threshold = float(threshold_raw) if threshold_raw else None
+            self.verifier = CocoaVerifier(checkpoint_path, threshold=threshold)
+            self.verifier_error = None
+        except Exception as exc:
+            self.verifier = None
+            self.verifier_error = f"Checkpoint verifier gagal dimuat: {type(exc).__name__}: {exc}"
+
+
+def _discover_maturity_checkpoints(self) -> None:
+    resnet_override = os.getenv("RESNET18_MATURITY_CHECKPOINT")
+
+    if resnet_override:
+        resnet_candidates = [
+            Path(resnet_override).expanduser().resolve()
+        ]
+    else:
+        resnet_candidates = [
+            self.model_dir / "resnet18_maturity.pth",
+            self.model_dir / "maturity" / "resnet18_maturity.pth",
+            self.model_dir / "maturity" / "resnet18_maturity_inference_state_dict.pth",
+            self.model_dir / "maturity" / "resnet18_maturity_best.pth",
+            self.model_dir / "maturity" / "resnet18" / "resnet18_maturity_inference_state_dict.pth",
+        ]
+
+    resnet_path = next(
+        (
+            path
+            for path in resnet_candidates
+            if path.is_file()
+        ),
+        None,
+    )
+
+    if resnet_path is None:
+        self.resnet18_model = None
+        self.resnet18_error = (
+            "Checkpoint ResNet18 belum ditemukan. "
+            "Periksa backend/models/resnet18_maturity.pth."
+        )
+    else:
+        try:
+            self.resnet18_model = MaturityClassifier(resnet_path)
+            self.resnet18_error = None
+
+        except Exception as exc:
+            self.resnet18_model = None
+            self.resnet18_error = (
+                f"Checkpoint ResNet18 gagal dimuat: "
+                f"{type(exc).__name__}: {exc}"
+            )
+
+    # EfficientNet tidak dipakai dalam konfigurasi inference final KAORA.
+    self.efficientnet_b0_model = None
+    self.efficientnet_b0_error = (
+        "Tidak dimuat. Model inference yang dipilih adalah ResNet18."
+    )
+
+    def get_status(self) -> dict[str, Any]:
+        resnet_ready = self.resnet18_model is not None
+        effnet_ready = self.efficientnet_b0_model is not None
+        ensemble_ready = resnet_ready and effnet_ready
+
+        status = RuntimeStatus(
+            cocoa_verifier=self.verifier is not None,
+            resnet18=resnet_ready,
+            efficientnet_b0=effnet_ready,
+            ensemble=ensemble_ready,
+            localizer=False,
+        ).to_dict()
+        status["model_dir"] = str(self.model_dir)
+        status["verifier_model"] = self.verifier.model_version if self.verifier else None
+        status["verifier_error"] = self.verifier_error
+        status["maturity_models"] = {
+            "resnet18": getattr(self.resnet18_model, "model_version", None),
+            "efficientnet_b0": getattr(self.efficientnet_b0_model, "model_version", None),
+        }
+        status["maturity_errors"] = {
+            "resnet18": self.resnet18_error,
+            "efficientnet_b0": self.efficientnet_b0_error,
+        }
+        status["localization_note"] = "Lokalisasi AI belum tersedia; GuideFrame hanya panduan posisi visual."
+        return status
+
+    def verify_cocoa(self, image: Image.Image) -> dict[str, Any] | None:
+        if self.verifier is None:
+            return None
+        return self.verifier.predict(image)
+
+def predict_maturity(self, image: Image.Image) -> dict[str, Any] | None:
+    if self.resnet18_model is None:
+        return None
+
+    return self.resnet18_model.predict(image)
+
+    @staticmethod
+    def _image_sha256(image_bytes: bytes) -> str:
+        return hashlib.sha256(image_bytes).hexdigest()
+
+    def issue_verification_token(self, image_bytes: bytes) -> str:
+        payload = {
+            "sha256": self._image_sha256(image_bytes),
+            "exp": int(time.time()) + get_verification_ttl_seconds(),
+        }
+        encoded = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode("utf-8")).decode("ascii")
+        sig = hmac.new(
+            get_verification_secret().encode("utf-8"),
+            encoded.encode("ascii"),
+            hashlib.sha256,
+        ).hexdigest()
+        return f"{encoded}.{sig}"
+
+    def validate_verification_token(self, token: str | None, image_bytes: bytes) -> bool:
+        if not token or "." not in token:
+            return False
+        encoded, sig = token.split(".", 1)
+        expected_sig = hmac.new(
+            get_verification_secret().encode("utf-8"),
+            encoded.encode("ascii"),
+            hashlib.sha256,
+        ).hexdigest()
+        if not hmac.compare_digest(sig, expected_sig):
+            return False
+        try:
+            payload = json.loads(base64.urlsafe_b64decode(encoded.encode("ascii")).decode("utf-8"))
+        except Exception:
+            return False
+        if int(payload.get("exp", 0)) < int(time.time()):
+            return False
+        return payload.get("sha256") == self._image_sha256(image_bytes)
+
+
+model_runtime = ModelRuntime()

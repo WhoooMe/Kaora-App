@@ -43,12 +43,12 @@ export const Sel = ({ v, on, opts, label }) => (
 
 export function Kpis({ v }) {
   const K = [
-    ["Total Buah Terdeteksi", v.total, "scan", "#2F7848"],
-    ["Siap Panen", v.ok, "check", "#5EAD47"],
-    ["Sudah Dipanen", v.harv, "leaf", "#174D35"],
+    ["Total Deteksi Tersimpan", v.total, "scan", "#2F7848"],
+    ["Mature (kelas terdeteksi)", v.ok, "check", "#5EAD47"],
+    ["Sudah Dipanen · belum dicatat", v.harv, "leaf", "#174D35"],
     ["Mentah", v.raw, "chart", "#E2B23F"],
     ["Terlalu Matang", v.over, "hist", "#ED8B43"],
-    ["Busuk / Rusak", v.bad, "x", "#D9534F"],
+    ["Kerusakan · belum dicatat", v.bad, "x", "#D9534F"],
   ];
 
   return (
@@ -61,7 +61,7 @@ export function Kpis({ v }) {
             </span>
             {l}
           </div>
-          <b>{fmt(n)}</b>
+          <b>{n == null ? "—" : fmt(n)}</b>
         </Card>
       ))}
     </div>
@@ -110,8 +110,8 @@ export const HistRows = ({ rows }) =>
     </tr>
   ));
 
-export const HistTable = ({ rows }) => (
-  <div className="scroll">
+export const HistTable = ({ rows, className = "" }) => (
+  <div className={`scroll ${className}`.trim()}>
     <table>
       <thead>
         <tr>

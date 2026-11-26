@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import AppHeader from "./components/AppHeader";
 import AppFooter from "./components/AppFooter";
+import { WorkflowProvider } from "./context/WorkflowContext.jsx";
 import {
   DashboardPage,
   DeteksiPage,
@@ -10,6 +11,7 @@ import {
   KameraPage,
   RiwayatPage,
   PengaturanPage,
+  KalibrasiPage,
 } from "./pages/index.js";
 
 const PAGES = {
@@ -21,6 +23,7 @@ const PAGES = {
   kamera: KameraPage,
   riwayat: RiwayatPage,
   pengaturan: PengaturanPage,
+  kalibrasi: KalibrasiPage,
 };
 
 export default function App() {
@@ -54,29 +57,31 @@ export default function App() {
   const Page = PAGES[pg] || DashboardPage;
 
   return (
-    <div className="shell">
-      <AppHeader
-        pg={pg}
-        go={go}
-        menu={menu}
-        setMenu={setMenu}
-        more={more}
-        setMore={setMore}
-        bell={bell}
-        setBell={setBell}
-      />
+    <WorkflowProvider>
+      <div className="shell">
+        <AppHeader
+          pg={pg}
+          go={go}
+          menu={menu}
+          setMenu={setMenu}
+          more={more}
+          setMore={setMore}
+          bell={bell}
+          setBell={setBell}
+        />
 
-      <main key={pg}>
-        <Page go={go} toast={toast} />
-      </main>
+        <main key={pg}>
+          <Page go={go} toast={toast} />
+        </main>
 
-      <AppFooter />
+        <AppFooter go={go} />
 
-      {tm && (
-        <div className="toast" role="status">
-          {tm}
-        </div>
-      )}
-    </div>
+        {tm && (
+          <div className="toast" role="status">
+            {tm}
+          </div>
+        )}
+      </div>
+    </WorkflowProvider>
   );
 }
