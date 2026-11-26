@@ -1,0 +1,18 @@
+node_modules/
+.venv/
+node_modules/
+dist/
+.env
+backend/.venv/
+backend/__pycache__/
+backend/.pytest_cache/
+backend/**/*.pyc
+*.pth
+*.pt
+*.onnx
+.DS_Store
+# Local datasets and trained weights
+data/cocoa_verifier/*
+!data/cocoa_verifier/README.md
+models/*.pth
+models/*metrics*.json

@@ -1,11 +1,13 @@
 import React from "react";
 import { Icon } from "../ui.jsx";
+import { KaoraLogo } from "./ui/KaoraComponents.jsx";
 
 const MAIN = [
   ["dashboard", "Dashboard", "grid"],
   ["deteksi", "Deteksi Kakao", "scan"],
-  ["analisis", "Analisis Panen", "chart"],
-  ["monitor", "Live Monitor", "vid"],
+  ["kalibrasi", "Kalibrasi", "scan"],
+  ["analisis", "Analisis Deteksi", "chart"],
+  ["monitor", "Monitor Perangkat", "vid"],
 ];
 
 const MORE = [
@@ -32,11 +34,8 @@ const AppHeader = ({ pg, go, menu, setMenu, more, setMore, bell, setBell }) => {
   return (
     <div className="top-wrap">
       <header className="topbar">
-        <button className="brand" onClick={() => go("dashboard")}>
-          <i>
-            <Icon n="leaf" s={20} />
-          </i>
-          Kaora App
+        <button className="brand" aria-label="KAORA — Dashboard" onClick={() => go("dashboard")}>
+          <KaoraLogo size={36} />
         </button>
 
         <nav className="links" aria-label="Navigasi utama">
@@ -54,10 +53,9 @@ const AppHeader = ({ pg, go, menu, setMenu, more, setMore, bell, setBell }) => {
         </nav>
 
         <div className="right">
-          <select className="sel kb" aria-label="Pilih kebun">
-            <option>Kebun Sumber Rejeki</option>
-            <option>Kebun Lereng Timur</option>
-          </select>
+          <button className="sel kb" type="button" onClick={() => go("kebun")} aria-label="Informasi kebun belum tersedia">
+            Kebun · belum tersedia
+          </button>
 
           <div className="dd">
             <button
@@ -71,19 +69,11 @@ const AppHeader = ({ pg, go, menu, setMenu, more, setMore, bell, setBell }) => {
             {bell && (
               <div className="menu r">
                 <div>
-                  <b>Kamera D-01 offline</b>
-                  <small>12 menit lalu</small>
-                </div>
-                <div>
-                  <b>14 buah terlalu matang di Blok C</b>
-                  <small>1 jam lalu</small>
+                  <b>Notifikasi operasional belum tersedia</b>
+                  <small>Backend belum menyediakan sumber notifikasi perangkat atau panen.</small>
                 </div>
               </div>
             )}
-          </div>
-
-          <div className="av" title="Hendra Saputra">
-            HS
           </div>
 
           <button

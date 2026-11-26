@@ -1,7 +1,7 @@
 import React from "react";
 import { Icon } from "../ui.jsx";
 
-const AppFooter = () => (
+const AppFooter = ({ go }) => (
   <footer className="site-footer">
     <div className="footer-shell">
       <div className="footer-brand-block">
@@ -32,34 +32,29 @@ const AppFooter = () => (
         <div className="footer-links">
           <h4>Navigasi</h4>
           <ul>
-            <li>Beranda</li>
             <li>Dashboard</li>
             <li>Deteksi Kakao</li>
-            <li>Analisis Panen</li>
-            <li>Live Monitor</li>
-            <li>Kelola Kebun</li>
+            <li>Kalibrasi</li>
+            <li>Analisis Deteksi</li>
+            <li>Monitor Perangkat</li>
+            <li>Kebun dan Blok</li>
           </ul>
         </div>
 
         <div className="footer-links">
           <h4>Bantuan</h4>
           <ul>
-            <li>Pusat Bantuan</li>
-            <li>Panduan Penggunaan</li>
-            <li>FAQ</li>
-            <li>Kontak Kami</li>
-            <li>Kebijakan Privasi</li>
-            <li>Syarat &amp; Ketentuan</li>
+            <li>Panduan: belum tersedia</li>
+            <li>Bantuan: belum tersedia</li>
+            <li>Kebijakan privasi: belum tersedia</li>
+            <li>Syarat penggunaan: belum tersedia</li>
           </ul>
         </div>
 
         <div className="footer-links">
           <h4>Kontak</h4>
           <ul>
-            <li>Jl. Pertanian No. 123, Bogor, Jawa Barat 16152</li>
-            <li>support@kaora.app</li>
-            <li>+62 812 3456 7890</li>
-            <li>Senin - Jumat, 08:00 - 17:00 WIB</li>
+            <li>Informasi kontak resmi belum tersedia.</li>
           </ul>
         </div>
       </div>
@@ -70,10 +65,10 @@ const AppFooter = () => (
             <Icon n="leaf" s={18} />
           </span>
         </div>
-        <h4>Siap untuk hasil panen yang lebih baik?</h4>
-        <p>Mulai gunakan Kaora App sekarang dan rasakan manfaatnya.</p>
-        <button className="btn footer-btn" type="button">
-          Mulai Sekarang
+        <h4>Mulai analisis kematangan kakao</h4>
+        <p>Verifikasi gambar kakao dan tinjau hasil klasifikasi yang tersimpan.</p>
+        <button className="btn footer-btn" type="button" onClick={() => go?.("kalibrasi")}>
+          Mulai Kalibrasi
           <Icon n="chev" s={15} />
         </button>
       </div>

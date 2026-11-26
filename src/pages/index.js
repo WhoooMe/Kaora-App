@@ -6,3 +6,5 @@ export { default as KebunPage } from "./KebunPage.jsx";
 export { default as KameraPage } from "./KameraPage.jsx";
 export { default as RiwayatPage } from "./RiwayatPage.jsx";
 export { default as PengaturanPage } from "./PengaturanPage.jsx";
+
+export { default as KalibrasiPage } from "./KalibrasiPage.jsx";
