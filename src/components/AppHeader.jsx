@@ -1,14 +1,7 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { Icon } from "../ui.jsx";
 import { KaoraLogo } from "./ui/KaoraComponents.jsx";
-
-const MAIN = [
-  ["dashboard", "Dashboard", "grid"],
-  ["deteksi", "Deteksi Kakao", "scan"],
-  ["kalibrasi", "Kalibrasi", "scan"],
-  ["analisis", "Analisis Deteksi", "chart"],
-  ["monitor", "Monitor Perangkat", "vid"],
-];
+import { MAIN_NAVIGATION } from "./navigation.js";
 
 const MORE = [
   ["kebun", "Kebun dan Blok", "leaf"],
@@ -19,6 +12,30 @@ const MORE = [
 
 const AppHeader = ({ pg, go, menu, setMenu, more, setMore, bell, setBell }) => {
   const isMore = MORE.some((m) => m[0] === pg);
+  const manageDropdownRef = useRef(null);
+  const notificationsRef = useRef(null);
+
+  useEffect(() => {
+    if (!more && !bell) return undefined;
+
+    const closeOutside = (event) => {
+      if (!manageDropdownRef.current?.contains(event.target)) setMore(false);
+      if (!notificationsRef.current?.contains(event.target)) setBell(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") {
+        setMore(false);
+        setBell(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [more, bell, setMore, setBell]);
 
   const Item = ([k, l, i]) => (
     <button
@@ -39,16 +56,22 @@ const AppHeader = ({ pg, go, menu, setMenu, more, setMore, bell, setBell }) => {
         </button>
 
         <nav className="links" aria-label="Navigasi utama">
-          {MAIN.map(Item)}
-          <div className="dd">
+          {MAIN_NAVIGATION.map(Item)}
+          <div className="dd" ref={manageDropdownRef}>
             <button
               className={"nl" + (isMore ? " on" : "")}
+              aria-expanded={more}
               onClick={() => setMore(!more)}
             >
               Kelola
               <Icon n="chev" s={15} />
             </button>
-            {more && <div className="menu">{MORE.map(Item)}</div>}
+            <div
+              className={`menu manage-menu${more ? " is-open" : ""}`}
+              aria-hidden={!more}
+            >
+              {MORE.map(Item)}
+            </div>
           </div>
         </nav>
 
@@ -57,7 +80,7 @@ const AppHeader = ({ pg, go, menu, setMenu, more, setMore, bell, setBell }) => {
             Kebun · belum tersedia
           </button>
 
-          <div className="dd">
+          <div className="dd" ref={notificationsRef}>
             <button
               className="ib"
               aria-label="Notifikasi"
@@ -67,7 +90,7 @@ const AppHeader = ({ pg, go, menu, setMenu, more, setMore, bell, setBell }) => {
               <b />
             </button>
             {bell && (
-              <div className="menu r">
+              <div className="menu r is-open">
                 <div>
                   <b>Notifikasi operasional belum tersedia</b>
                   <small>Backend belum menyediakan sumber notifikasi perangkat atau panen.</small>
@@ -86,7 +109,7 @@ const AppHeader = ({ pg, go, menu, setMenu, more, setMore, bell, setBell }) => {
         </div>
       </header>
 
-      {menu && <div className="mob">{[...MAIN, ...MORE].map(Item)}</div>}
+      {menu && <div className="mob">{[...MAIN_NAVIGATION, ...MORE].map(Item)}</div>}
     </div>
   );
 };

@@ -3,7 +3,18 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - only used in minimal environments
+    load_dotenv = None
+
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
+# Uvicorn does not load a .env file unless it is started with --env-file.
+# Load the backend-local file here so the documented configuration is also
+# applied when the app is started with `uvicorn app.main:app`.
+if load_dotenv is not None:
+    load_dotenv(BACKEND_ROOT / ".env", override=False)
 
 
 def get_cors_origins() -> list[str]:

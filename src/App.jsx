@@ -11,7 +11,6 @@ import {
   KameraPage,
   RiwayatPage,
   PengaturanPage,
-  KalibrasiPage,
 } from "./pages/index.js";
 
 const PAGES = {
@@ -23,11 +22,14 @@ const PAGES = {
   kamera: KameraPage,
   riwayat: RiwayatPage,
   pengaturan: PengaturanPage,
-  kalibrasi: KalibrasiPage,
+  kalibrasi: DeteksiPage,
 };
 
 export default function App() {
-  const read = () => location.hash.slice(1) || "dashboard";
+  const read = () => {
+    const hash = location.hash.slice(1) || "dashboard";
+    return hash === "kalibrasi" ? "deteksi" : hash;
+  };
   const [pg, setPg] = useState(read),
     [menu, setMenu] = useState(false),
     [more, setMore] = useState(false),
@@ -35,8 +37,17 @@ export default function App() {
     [tm, setTm] = useState("");
 
   useEffect(() => {
+    if (location.hash === "#kalibrasi") {
+      location.replace("#deteksi");
+    }
     const f = () => {
+      if (location.hash === "#kalibrasi") {
+        location.replace("#deteksi");
+        return;
+      }
       setPg(read());
+      setMore(false);
+      setBell(false);
       window.scrollTo(0, 0);
     };
     addEventListener("hashchange", f);
@@ -44,9 +55,10 @@ export default function App() {
   }, []);
 
   const go = (p) => {
-    location.hash = p;
+    location.hash = p === "kalibrasi" ? "deteksi" : p;
     setMenu(false);
     setMore(false);
+    setBell(false);
   };
 
   const toast = (m) => {

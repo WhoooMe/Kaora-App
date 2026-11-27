@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import io
 from contextlib import asynccontextmanager
+from datetime import datetime, time, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -344,6 +346,217 @@ def list_detections(
         "total": int(total),
         "limit": limit,
         "offset": offset,
+    }
+
+
+@app.get("/api/v1/detections/stats")
+def detection_stats(db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Return aggregate statistics from persisted detection records."""
+    total = db.scalar(select(func.count()).select_from(Detection)) or 0
+
+    maturity_counts_query = select(
+        Detection.maturity_class,
+        func.count().label("count"),
+    ).group_by(Detection.maturity_class)
+    known_classes = {"Immature", "Mature", "Overmature"}
+    maturity_counts: dict[str, int] = {}
+    for maturity_class, count in db.execute(maturity_counts_query).all():
+        key = maturity_class or "Unknown"
+        maturity_counts[key] = maturity_counts.get(key, 0) + count
+
+    latest_query = select(func.max(Detection.created_at)).select_from(Detection)
+    latest_at = db.scalar(latest_query)
+
+    return {
+        "total_detections": total,
+        "mature_count": maturity_counts.get("Mature", 0),
+        "immature_count": maturity_counts.get("Immature", 0),
+        "overmature_count": maturity_counts.get("Overmature", 0),
+        "maturity_distribution": maturity_counts,
+        "unknown_maturity_count": sum(
+            count for maturity_class, count in maturity_counts.items()
+            if maturity_class not in known_classes
+        ),
+        "latest_detection_at": latest_at.isoformat() if latest_at else None,
+    }
+
+
+@app.get("/api/v1/detections/trend")
+def detection_trend(
+    period: str = Query("7 Hari", description="Period: '24 Jam', '7 Hari', '30 Hari', '6 Bulan'"),
+    time_zone: str = Query("UTC", description="IANA time zone used for local trend buckets."),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Return historical trend counts for the selected period."""
+    try:
+        zone = ZoneInfo(time_zone)
+    except (ValueError, ZoneInfoNotFoundError):
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "INVALID_TIME_ZONE", "message": f"Zona waktu '{time_zone}' tidak didukung."},
+        ) from None
+
+    period_config = {
+        "24 Jam": {"interval": "hour", "buckets": 8, "bucket_hours": 3},
+        "7 Hari": {"interval": "day", "buckets": 7, "bucket_days": 1},
+        "30 Hari": {"interval": "day", "buckets": 10, "bucket_days": 3},
+        "6 Bulan": {"interval": "month", "buckets": 6},
+    }
+
+    if period not in period_config:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "INVALID_PERIOD", "message": f"Periode '{period}' tidak didukung."},
+        )
+
+    config = period_config[period]
+    now_utc = datetime.now(timezone.utc)
+    now_local = now_utc.astimezone(zone)
+    interval = config["interval"]
+    bucket_count = config["buckets"]
+
+    if interval == "hour":
+        start_utc = now_utc - timedelta(hours=24)
+        bucket_hours = config["bucket_hours"]
+        bucket_starts = [
+            (start_utc + timedelta(hours=index * bucket_hours)).astimezone(zone)
+            for index in range(bucket_count)
+        ]
+    elif interval == "day":
+        bucket_days = config["bucket_days"]
+        first_date = now_local.date() - timedelta(days=bucket_count * bucket_days - 1)
+        first_bucket = datetime.combine(first_date, time.min, tzinfo=zone)
+        start_utc = first_bucket.astimezone(timezone.utc)
+        bucket_starts = [
+            datetime.combine(
+                first_date + timedelta(days=index * bucket_days),
+                time.min,
+                tzinfo=zone,
+            )
+            for index in range(bucket_count)
+        ]
+    else:
+        month_index = now_local.year * 12 + now_local.month - bucket_count
+        first_year, first_month_index = divmod(month_index, 12)
+        first_bucket = datetime(first_year, first_month_index + 1, 1, tzinfo=zone)
+        start_utc = first_bucket.astimezone(timezone.utc)
+        bucket_starts = []
+        for index in range(bucket_count):
+            year, month_index = divmod(first_year * 12 + first_month_index + index, 12)
+            bucket_starts.append(datetime(year, month_index + 1, 1, tzinfo=zone))
+
+    def bucket_start(value: datetime) -> datetime | None:
+        local_value = value.astimezone(zone)
+        if interval == "hour":
+            elapsed = (value.astimezone(timezone.utc) - start_utc).total_seconds()
+            index = int(elapsed // (bucket_hours * 60 * 60))
+        elif interval == "day":
+            elapsed_days = (local_value.date() - first_date).days
+            index = elapsed_days // bucket_days
+        else:
+            index = (
+                (local_value.year - first_year) * 12
+                + local_value.month
+                - first_month_index
+                - 1
+            )
+        return bucket_starts[index] if 0 <= index < bucket_count else None
+
+    def bucket_label(value: datetime) -> str:
+        if interval == "hour":
+            return value.strftime("%H:%M")
+        if interval == "day":
+            return value.strftime("%Y-%m-%d")
+        return value.strftime("%Y-%m")
+
+    maturity_labels = ("Immature", "Mature", "Overmature")
+    trend_by_bucket = {
+        bucket.isoformat(): {
+            "bucket": bucket.isoformat(),
+            "label": bucket_label(bucket),
+            "counts": {maturity_class: 0 for maturity_class in maturity_labels},
+        }
+        for bucket in bucket_starts
+    }
+
+    rows = db.execute(
+        select(Detection.created_at, Detection.maturity_class).where(
+            Detection.created_at >= start_utc,
+            Detection.created_at <= now_utc,
+        )
+    ).all()
+    total_in_range = 0
+    for created_at, maturity_class in rows:
+        created_at_utc = (
+            created_at.replace(tzinfo=timezone.utc)
+            if created_at.tzinfo is None
+            else created_at.astimezone(timezone.utc)
+        )
+        start = bucket_start(created_at_utc)
+        if start is None:
+            continue
+        key = start.isoformat()
+        bucket = trend_by_bucket.get(key)
+        if bucket is None:
+            continue
+        maturity_key = maturity_class or "Unknown"
+        bucket["counts"][maturity_key] = bucket["counts"].get(maturity_key, 0) + 1
+        total_in_range += 1
+
+    trend_data = list(trend_by_bucket.values())
+    return {
+        "period": period,
+        "time_zone": time_zone,
+        "start_time": start_utc.isoformat(),
+        "end_time": now_utc.isoformat(),
+        "interval": interval,
+        "total_buckets": len(trend_data),
+        "total_in_range": total_in_range,
+        "trend": trend_data,
+    }
+
+
+@app.get("/api/v1/detections/distribution-by-block")
+def detection_distribution_by_block(
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Return detection counts grouped by block name and maturity class."""
+    distribution_query = select(
+        Detection.block_name,
+        Detection.maturity_class,
+        func.count().label("count"),
+    ).where(Detection.block_name.isnot(None)).group_by(
+        Detection.block_name, Detection.maturity_class
+    ).order_by(Detection.block_name, Detection.maturity_class)
+
+    results = db.execute(distribution_query).all()
+
+    blocks = {}
+    for block_name, maturity_class, count in results:
+        if block_name not in blocks:
+            blocks[block_name] = {
+                "block_name": block_name,
+                "counts": {},
+            }
+        maturity_key = maturity_class or "Unknown"
+        counts = blocks[block_name]["counts"]
+        counts[maturity_key] = counts.get(maturity_key, 0) + count
+
+    distribution_data = sorted(blocks.values(), key=lambda x: x["block_name"])
+
+    for block in distribution_data:
+        block["total"] = sum(block["counts"].values())
+
+    no_block_query = select(func.count()).select_from(Detection).where(Detection.block_name.is_(None))
+    no_block_count = db.scalar(no_block_query) or 0
+    total_detections = db.scalar(select(func.count()).select_from(Detection)) or 0
+
+    return {
+        "blocks": distribution_data,
+        "total_blocks": len(distribution_data),
+        "no_block_count": no_block_count,
+        "total_with_blocks": sum(block["total"] for block in distribution_data),
+        "total_detections": total_detections,
     }
 
 

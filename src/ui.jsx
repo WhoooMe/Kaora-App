@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { C, NM, ORDER, BLOK, sum } from "./data.js";
 const P = {
   grid: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z",
@@ -8,14 +8,19 @@ const P = {
   leaf: "M12 21V9M12 9C12 5 8 3 4 3c0 4 2 7 8 6M12 13c0-4 4-6 8-6 0 4-2 7-8 6",
   cam: "M3 7h4l2-2h6l2 2h4v12H3zM12 10a3 3 0 1 0 0 6 3 3 0 0 0 0-6",
   hist: "M3 12a9 9 0 1 0 3-6.7M3 4v5h5M12 7v5l3 2",
+  ref: "M20 11a8 8 0 0 0-14.9-4M4 4v4h4M4 13a8 8 0 0 0 14.9 4M20 20v-4h-4",
   set: "M4 7h10M18 7h2M4 17h2M10 17h10",
   bell: "M6 16v-5a6 6 0 0 1 12 0v5l2 2H4zM10 21h4",
   check: "M5 12l4 4 10-10",
   up: "M12 16V4M7 9l5-5 5 5M4 20h16",
   menu: "M4 7h16M4 12h16M4 17h16",
   chev: "M6 9l6 6 6-6",
+  filter: "M4 5h16l-6.5 7.5v5L10.5 19v-6.5z",
   warn: "M12 3 2 20h20zM12 10v4M12 17v.5",
   x: "M6 6l12 12M18 6 6 18",
+  focus: "M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6",
+  shieldCheck: "M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3zM9 12l2 2 4-4",
+  badgeCheck: "M12 2l2.4 2.4 3.4-.3.9 3.3 3 1.7-1.2 3.2 1.2 3.2-3 1.7-.9 3.3-3.4-.3L12 22l-2.4-2.4-3.4.3-.9-3.3-3-1.7 1.2-3.2-1.2-3.2 3-1.7.9-3.3 3.4.3zM9 12l2 2 4-4",
 };
 export const Icon = ({ n, s = 18 }) => (
   <svg
@@ -50,20 +55,67 @@ export const Legend = () => (
     ))}
   </div>
 );
-export const Tabs = ({ v, items, on }) => (
-  <div className="tabs" role="tablist">
-    {items.map((k) => (
-      <button
-        key={k}
-        role="tab"
-        className={k === v ? "on" : ""}
-        onClick={() => on(k)}
-      >
-        {k}
-      </button>
-    ))}
-  </div>
-);
+export const Tabs = ({ v, items, on, slider = false }) => {
+  const tabsRef = useRef(null);
+  const selectedTabRef = useRef(null);
+  const [indicator, setIndicator] = useState(null);
+
+  useLayoutEffect(() => {
+    if (!slider) return undefined;
+
+    const updateIndicator = () => {
+      const tab = selectedTabRef.current;
+      if (!tab) return;
+      setIndicator({ left: tab.offsetLeft, width: tab.offsetWidth });
+    };
+
+    updateIndicator();
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(updateIndicator);
+    if (observer && tabsRef.current) observer.observe(tabsRef.current);
+    window.addEventListener("resize", updateIndicator);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", updateIndicator);
+    };
+  }, [slider, v]);
+
+  return (
+    <div
+      className={`tabs${slider ? " has-slider" : ""}`}
+      role="tablist"
+      ref={tabsRef}
+    >
+      {slider && (
+        <span
+          className="tabs-slider"
+          aria-hidden="true"
+          style={
+            indicator
+              ? { transform: `translateX(${indicator.left}px)`, width: indicator.width }
+              : undefined
+          }
+        />
+      )}
+      {items.map((k) => (
+        <button
+          key={k}
+          type="button"
+          role="tab"
+          aria-selected={k === v}
+          className={k === v ? "on" : ""}
+          ref={k === v ? selectedTabRef : undefined}
+          onClick={() => on(k)}
+        >
+          {k}
+        </button>
+      ))}
+    </div>
+  );
+};
 export const Pod = ({ c, s = 30 }) => (
   <svg width={s} height={s} viewBox="0 0 30 30">
     <ellipse
@@ -214,19 +266,28 @@ const sm = (pts, f) =>
         : (f ? "M" : "L") + x + "," + y,
     )
     .join("");
-export function TrendChart({ s, labels }) {
+export function TrendChart({ s, labels, tickIndices = null, tooltipLabels = null }) {
   const [h, setH] = useState(null);
   const n = labels.length,
     W = 640,
     H = 270,
     L = 40,
-    B = 28,
+    B = 30,
     T = 10,
-    R = 10;
+    R = 14;
   const tot = labels.map((_, i) => ORDER.reduce((a, c) => a + s[c][i], 0)),
-    mx = Math.max(50, Math.ceil(Math.max(...tot) / 50) * 50);
-  const x = (i) => L + ((W - L - R) * i) / (n - 1),
+    mx = Math.max(50, Math.ceil(Math.max(0, ...tot) / 50) * 50);
+  const x = (i) => (n <= 1 ? (L + W - R) / 2 : L + ((W - L - R) * i) / (n - 1)),
     y = (v) => T + (H - T - B) * (1 - v / mx);
+  const visibleTicks = useMemo(() => {
+    if (Array.isArray(tickIndices)) return new Set(tickIndices);
+    if (n <= 8) return new Set(labels.map((_, i) => i));
+    const step = Math.ceil(n / 6);
+    const set = new Set();
+    for (let i = 0; i < n; i += step) set.add(i);
+    if (n > 1 && n - 1 - Math.max(...set) >= Math.floor(step / 2)) set.add(n - 1);
+    return set;
+  }, [tickIndices, n, labels]);
   let base = Array(n).fill(0);
   const areas = ORDER.map((c) => {
     const top = base.map((b, i) => b + s[c][i]);
@@ -250,15 +311,18 @@ export function TrendChart({ s, labels }) {
     );
   });
   const move = (e) => {
+    if (!n) return;
     const r = e.currentTarget.getBoundingClientRect(),
       px =
         (((e.touches ? e.touches[0].clientX : e.clientX) - r.left) / r.width) *
         W;
     setH(
-      Math.max(
-        0,
-        Math.min(n - 1, Math.round(((px - L) / (W - L - R)) * (n - 1))),
-      ),
+      n <= 1
+        ? 0
+        : Math.max(
+            0,
+            Math.min(n - 1, Math.round(((px - L) / (W - L - R)) * (n - 1))),
+          ),
     );
   };
   return (
@@ -283,11 +347,18 @@ export function TrendChart({ s, labels }) {
           </g>
         ))}
         {areas}
-        {labels.map((l, i) => (
-          <text key={i} x={x(i)} y={H - 8} textAnchor="middle">
-            {l}
-          </text>
-        ))}
+        {labels.map((l, i) => {
+          if (!visibleTicks.has(i)) return null;
+          const anchor = i === 0 && n > 1 ? "start" : i === n - 1 && n > 1 ? "end" : "middle";
+          return (
+            <g key={i}>
+              <line x1={x(i)} x2={x(i)} y1={H - B} y2={H - B + 4} stroke="var(--bd)" />
+              <text x={x(i)} y={H - 8} textAnchor={anchor}>
+                {l}
+              </text>
+            </g>
+          );
+        })}
         {h !== null && (
           <line
             x1={x(h)}
@@ -317,7 +388,7 @@ export function TrendChart({ s, labels }) {
             top: 8,
           }}
         >
-          <b>{labels[h]}</b>
+          <b>{tooltipLabels?.[h] ?? labels[h]}</b>
           {[...ORDER].reverse().map((c) => (
             <div key={c}>
               <i style={{ background: C[c] }} />
@@ -399,3 +470,49 @@ export function Sensors({ list }) {
     </div>
   );
 }
+
+export function CameraUnavailable() {
+  return (
+    <div className="kaora-camera-unavailable">
+      <div className="kaora-camera-unavailable-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M3 7h4l2-2h6l2 2h4v12H3zM12 10a3 3 0 1 0 0 6 3 3 0 0 0 0-6" />
+          <path d="M5 5l14 14" strokeWidth="2" />
+        </svg>
+      </div>
+      <h3>Kamera Tidak Tersedia</h3>
+      <p>Browser atau perangkat Anda tidak mendukung akses kamera, atau izin akses kamera belum diberikan.</p>
+      <p className="sub">Coba gunakan opsi <strong>Unggah Foto</strong> untuk melanjutkan analisis kematangan kakao.</p>
+    </div>
+  );
+}
+
+export function BackendDataUnavailable({ section = "data", apiEndpoint = "" }) {
+  return (
+    <div className="kaora-backend-unavailable">
+      <div className="kaora-backend-unavailable-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
+          <path d="M12 16v-4M12 8h.01" />
+        </svg>
+      </div>
+      <h3>Data {section} belum tersedia</h3>
+      <p>
+        Integrasi backend untuk data ini sedang dalam pengembangan.
+        {apiEndpoint && (
+          <>
+            {" "}
+            API endpoint: <code>{apiEndpoint}</code>
+          </>
+        )}
+      </p>
+      <p className="sub">
+        Halaman ini saat ini menampilkan data simulasi untuk keperluan pengembangan UI.
+        Data riil akan tersedia setelah integrasi backend selesai.
+      </p>
+    </div>
+  );
+}
+
+export { DashboardHeroMedia } from "./components/ui/KaoraComponents.jsx";
+export { PrimaryButton, SecondaryButton, StatusBadge, StepIndicator } from "./components/ui/KaoraComponents.jsx";
