@@ -1,5 +1,34 @@
 import React from "react";
 import { Icon } from "../ui.jsx";
+import { KaoraLogo } from "./ui/KaoraComponents.jsx";
+import { MAIN_NAVIGATION } from "./navigation.js";
+import facebookIcon from "../assets/facebook.png";
+import instagramIcon from "../assets/instagram.png";
+import linkedinIcon from "../assets/linkedin.png";
+import twitterIcon from "../assets/twitter.png";
+
+const FOOTER_SOCIALS = [
+  {
+    name: "Facebook",
+    src: facebookIcon,
+    href: "https://www.facebook.com/",
+  },
+  {
+    name: "Instagram",
+    src: instagramIcon,
+    href: "https://www.instagram.com/",
+  },
+  {
+    name: "LinkedIn",
+    src: linkedinIcon,
+    href: "https://www.linkedin.com/",
+  },
+  {
+    name: "X",
+    src: twitterIcon,
+    href: "https://x.com/",
+  },
+];
 
 const AppFooter = ({ go }) => (
   <footer className="site-footer">
@@ -7,10 +36,10 @@ const AppFooter = ({ go }) => (
       <div className="footer-brand-block">
         <div className="footer-brand">
           <span className="footer-brand-mark">
-            <Icon n="leaf" s={18} />
+            <KaoraLogo symbolOnly size={34} />
           </span>
           <div>
-            <h3>Kaora App</h3>
+            <h3>KAORA</h3>
             <small>Agriculture Intelligence</small>
           </div>
         </div>
@@ -21,10 +50,29 @@ const AppFooter = ({ go }) => (
         </p>
 
         <div className="footer-socials">
-          <span>f</span>
-          <span>◌</span>
-          <span>in</span>
-          <span>x</span>
+          {FOOTER_SOCIALS.map(({ name, src, href }) => {
+            const sizeClass =
+              name === "Instagram" ? " footer-social-link--instagram" : "";
+
+            return (
+              <a
+                className={`footer-social-link${sizeClass}`}
+                key={name}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Kunjungi ${name}`}
+              >
+                <img
+                  className="footer-social-icon"
+                  src={src}
+                  alt=""
+                  width="28"
+                  height="28"
+                />
+              </a>
+            );
+          })}
         </div>
       </div>
 
@@ -32,12 +80,17 @@ const AppFooter = ({ go }) => (
         <div className="footer-links">
           <h4>Navigasi</h4>
           <ul>
-            <li>Dashboard</li>
-            <li>Deteksi Kakao</li>
-            <li>Kalibrasi</li>
-            <li>Analisis Deteksi</li>
-            <li>Monitor Perangkat</li>
-            <li>Kebun dan Blok</li>
+            {MAIN_NAVIGATION.map(([page, label]) => (
+              <li key={page}>
+                <button
+                  className="footer-nav-link"
+                  type="button"
+                  onClick={() => go?.(page)}
+                >
+                  {label}
+                </button>
+              </li>
+            ))}
           </ul>
         </div>
 
@@ -66,9 +119,15 @@ const AppFooter = ({ go }) => (
           </span>
         </div>
         <h4>Mulai analisis kematangan kakao</h4>
-        <p>Verifikasi gambar kakao dan tinjau hasil klasifikasi yang tersimpan.</p>
-        <button className="btn footer-btn" type="button" onClick={() => go?.("kalibrasi")}>
-          Mulai Kalibrasi
+        <p>
+          Verifikasi gambar kakao dan tinjau hasil klasifikasi yang tersimpan.
+        </p>
+        <button
+          className="btn footer-btn"
+          type="button"
+          onClick={() => go?.("deteksi")}
+        >
+          Mulai Deteksi Kakao
           <Icon n="chev" s={15} />
         </button>
       </div>

@@ -183,23 +183,52 @@
 }
 
 .kaora-step-num {
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--kaora-radius-md);
+  background: var(--kaora-bg-muted);
+  color: var(--kaora-text-primary);
+  font-size: var(--kaora-text-xs);
+  font-weight: 800;
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+
+.kaora-step-item.is-active .kaora-step-num {
+  background: var(--kaora-primary-dark);
+  color: var(--kaora-text-on-primary);
+}
+
+.kaora-step-item.is-done .kaora-step-num {
+  background: rgba(49, 91, 67, 0.14);
+  color: var(--kaora-primary);
+}
+
+.kaora-step-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.kaora-step-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--kaora-space-2);
+}
+
+.kaora-step-done-badge {
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--kaora-radius-pill);
-  background: var(--kaora-bg-muted);
-  color: var(--kaora-text-primary);
-  font-size: var(--kaora-text-xs);
-  font-weight: 800;
-}
-
-.kaora-step-item.is-active .kaora-step-num,
-.kaora-step-item.is-done .kaora-step-num {
-  background: var(--kaora-primary);
-  color: var(--kaora-text-on-primary);
+  background: var(--kaora-success);
+  color: #fff;
 }
 
 .kaora-guide-frame {
@@ -234,12 +263,16 @@
 }
 
 .kaora-guide-label {
-  background: rgba(32, 61, 49, 0.88);
-  color: var(--kaora-text-on-primary);
-  padding: 0.25rem 0.65rem;
+  background: rgba(20, 36, 28, 0.88);
+  color: #fcfaf5;
+  border: 1px solid rgba(252, 250, 245, 0.2);
+  padding: 5px 12px;
   border-radius: var(--kaora-radius-pill);
-  font-size: var(--kaora-text-xs);
+  font-size: 12px;
   font-weight: 600;
+  letter-spacing: 0.01em;
+  text-align: center;
+  backdrop-filter: blur(4px);
 }
 
 .kaora-verification-box {

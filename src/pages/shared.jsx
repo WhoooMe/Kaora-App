@@ -1,12 +1,20 @@
 import React, { useState } from "react";
 import { C, NM, BLOK, CAMS, HIST, PERIODS, series, sum, sensors, ORDER } from "../data.js";
+import detectionIcon from "../assets/kpi-icons/detection.webp";
+import matureIcon from "../assets/kpi-icons/mature.webp";
+import panenIcon from "../assets/kpi-icons/panen.webp";
+import rawIcon from "../assets/kpi-icons/raw.webp";
+import overmatureIcon from "../assets/kpi-icons/overmature.webp";
+import rootenIcon from "../assets/kpi-icons/rooten.webp";
+import overFruitIcon from "../assets/over.png";
+import perfectFruitIcon from "../assets/perfect.png";
+import rawFruitIcon from "../assets/raw1.png";
+import rootFruitIcon from "../assets/root.png";
 import {
-  Icon,
   Badge,
   Card,
   Legend,
   Tabs,
-  Pod,
   DistChart,
   Sensors,
   TrendChart,
@@ -26,6 +34,18 @@ export const Head = ({ t, s, children }) => (
 
 export const Demo = () => <span className="demo">Data Simulasi</span>;
 
+const HIST_ICONS = {
+  ok: perfectFruitIcon,
+  over: overFruitIcon,
+  raw: rawFruitIcon,
+  bad: rootFruitIcon,
+};
+
+export const MaturityFruitIcon = ({ maturityClass }) => {
+  const src = HIST_ICONS[maturityClass];
+  return src ? <img className="maturity-fruit-icon" src={src} alt="" /> : null;
+};
+
 export const Sel = ({ v, on, opts, label }) => (
   <select
     className="sel"
@@ -43,21 +63,21 @@ export const Sel = ({ v, on, opts, label }) => (
 
 export function Kpis({ v }) {
   const K = [
-    ["Total Deteksi Tersimpan", v.total, "scan", "#2F7848"],
-    ["Mature (kelas terdeteksi)", v.ok, "check", "#5EAD47"],
-    ["Sudah Dipanen · belum dicatat", v.harv, "leaf", "#174D35"],
-    ["Mentah", v.raw, "chart", "#E2B23F"],
-    ["Terlalu Matang", v.over, "hist", "#ED8B43"],
-    ["Kerusakan · belum dicatat", v.bad, "x", "#D9534F"],
+    ["Total Deteksi", v.total, detectionIcon],
+    ["Mature", v.ok, matureIcon],
+    ["Sudah Dipanen", v.harv, panenIcon],
+    ["Raw", v.raw, rawIcon],
+    ["Overmature", v.over, overmatureIcon],
+    ["Rooten", v.bad, rootenIcon],
   ];
 
   return (
     <div className="kpis">
-      {K.map(([l, n, i, c]) => (
+      {K.map(([l, n, icon]) => (
         <Card key={l} className="kpi">
           <div className="t">
-            <span className="ic" style={{ background: c }}>
-              <Icon n={i} s={15} />
+            <span className="ic">
+              <img src={icon} alt="" />
             </span>
             {l}
           </div>
@@ -91,11 +111,6 @@ export const HistRows = ({ rows }) =>
   rows.map(([t, b, s, n, c], i) => (
     <tr key={i}>
       <td>
-        <div className="th">
-          <Pod c={C[c]} />
-        </div>
-      </td>
-      <td>
         {t}
         <small className="mut">Riwayat</small>
       </td>
@@ -105,7 +120,10 @@ export const HistRows = ({ rows }) =>
         <b>{n}</b>
       </td>
       <td>
-        <Badge c={c}>{NM[c]}</Badge>
+        <span className="dashboard-dominant">
+          <MaturityFruitIcon maturityClass={c} />
+          <Badge c={c}>{NM[c]}</Badge>
+        </span>
       </td>
     </tr>
   ));
@@ -115,7 +133,6 @@ export const HistTable = ({ rows, className = "" }) => (
     <table>
       <thead>
         <tr>
-          <th />
           <th>Waktu</th>
           <th>Blok</th>
           <th>Sumber</th>

@@ -1,3 +1,4 @@
+// ---------- DESIGN TOKENS (used across app) ----------
 export const C = {
   bad: "#D9534F",
   ok: "#5EAD47",
@@ -11,20 +12,27 @@ export const NM = {
   over: "Terlalu Matang",
 };
 export const ORDER = ["bad", "ok", "raw", "over"];
-// 7 hari terakhir: 412 + 506 + 187 + 143 = 1.248 buah
+
+// Utility
+export const sum = (o) => Object.values(o).reduce((a, b) => a + b, 0);
+
+// ---------- MOCK DATASETS (development only - to be replaced with real APIs) ----------
+// TODO: Replace with GET /api/v1/garden/blocks/stats
 export const BLOK = {
   A: { ok: 118, raw: 120, over: 44, bad: 28 },
   B: { ok: 96, raw: 118, over: 42, bad: 30 },
   C: { ok: 112, raw: 146, over: 52, bad: 32 },
   D: { ok: 86, raw: 122, over: 49, bad: 53 },
 };
-export const sum = (o) => Object.values(o).reduce((a, b) => a + b, 0);
+// TODO: Replace with GET /api/v1/detections/trend?period={period}
 const D7 = {
   ok: [48, 52, 55, 60, 64, 63, 70],
   raw: [90, 84, 78, 72, 68, 60, 54],
   over: [20, 22, 24, 27, 30, 31, 33],
   bad: [18, 19, 20, 21, 21, 22, 22],
 };
+
+// Period definitions for UI - these can stay as frontend configuration
 export const PERIODS = {
   "24 Jam": {
     n: 8,
@@ -64,6 +72,7 @@ export function series(p, share = 1) {
   });
   return o;
 }
+// TODO: Replace with real GET /api/v1/detections/history (mocked for dev)
 export const HIST = [
   ["08:02", "A", "Kamera A-01", 9, "ok"],
   ["07:40", "C", "Foto unggahan", 6, "over"],
@@ -71,6 +80,8 @@ export const HIST = [
   ["Kemarin 16:20", "D", "Kamera D-01", 8, "bad"],
   ["Kemarin 09:05", "A", "Kamera A-02", 12, "ok"],
 ];
+
+// TODO: Replace with GET /api/v1/devices/cameras (mocked for dev)
 export const CAMS = [
   { id: "A-01", b: "A", st: "online", n: 9, t: "08:02" },
   { id: "A-02", b: "A", st: "online", n: 12, t: "08:01" },
@@ -78,6 +89,8 @@ export const CAMS = [
   { id: "C-01", b: "C", st: "warning", n: 6, t: "07:48" },
   { id: "D-01", b: "D", st: "offline", n: 0, t: "Kemarin 16:20" },
 ];
+
+// TODO: Replace with GET /api/v1/devices/sensors?block={block} (mocked for dev)
 export const sensors = (b) => [
   [
     "Kelembapan Tanah",

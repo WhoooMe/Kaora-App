@@ -1,4 +1,6 @@
+from datetime import datetime, timezone
 from io import BytesIO
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pytest
@@ -65,7 +67,7 @@ class FakeMaturityClassifier:
             probs = {"Immature": 0.02, "Mature": 0.08, "Overmature": 0.90}
         return {
             "maturity_class": self.maturity_class,
-            "confidence": probs[self.maturity_class],
+            "confidence": probs.get(self.maturity_class, 0.5),
             "probabilities": probs,
             "model_version": self.model_version,
         }
@@ -102,6 +104,27 @@ def test_health_endpoint():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["service"] == "kaora-api"
+    assert response.json()["database"] == "ready"
+
+
+def test_image_content_type_is_detected_from_bytes(monkeypatch, isolated_db_and_storage):
+    monkeypatch.setattr(model_runtime, "verifier", FakeCocoaVerifier(True))
+    monkeypatch.setattr(model_runtime, "resnet18_model", FakeMaturityClassifier("Mature"))
+    image_bytes = make_png(noise=True)
+
+    response = client.post(
+        "/api/v1/detect/frame",
+        files={"file": ("mislabelled.jpg", image_bytes, "image/jpeg")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["image_key"].endswith(".png")
+
+
+def test_validation_errors_are_explicit_for_missing_file():
+    response = client.post("/api/v1/detect/frame")
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["type"] == "missing"
 
 
 def test_model_status_exposes_separate_readiness_states(monkeypatch):
@@ -299,3 +322,127 @@ def test_detect_frame_rejects_non_cocoa_even_with_verified_flag(monkeypatch, iso
     )
     assert response.status_code == 422
     assert response.json()["detail"]["code"] == "COCOA_NOT_DETECTED"
+
+
+def test_dashboard_aggregates_reconcile_with_persisted_history(monkeypatch, isolated_db_and_storage):
+    monkeypatch.setattr(model_runtime, "verifier", FakeCocoaVerifier(True))
+    records = [
+        ("Mature", "Blok A"),
+        ("Immature", None),
+        ("Overmature", "Blok Umum"),
+        ("Unsupported", "Blok A"),
+    ]
+    created = []
+
+    for index, (maturity_class, block_name) in enumerate(records):
+        monkeypatch.setattr(
+            model_runtime, "resnet18_model", FakeMaturityClassifier(maturity_class)
+        )
+        data = {"block_name": block_name} if block_name else {}
+        response = client.post(
+            "/api/v1/detect/frame",
+            files={
+                "file": (
+                    f"cocoa-{index}.png",
+                    make_png(noise=True),
+                    "image/png",
+                )
+            },
+            data=data,
+        )
+        assert response.status_code == 200
+        created.append(response.json())
+
+    history = client.get("/api/v1/detections?limit=100").json()
+    stats_response = client.get("/api/v1/detections/stats")
+    trend_response = client.get(
+        "/api/v1/detections/trend?period=7%20Hari&time_zone=Asia%2FMakassar"
+    )
+    hourly_trend_response = client.get(
+        "/api/v1/detections/trend?period=24%20Jam&time_zone=Asia%2FMakassar"
+    )
+    monthly_trend_response = client.get(
+        "/api/v1/detections/trend?period=30%20Hari&time_zone=Asia%2FMakassar"
+    )
+    six_month_trend_response = client.get(
+        "/api/v1/detections/trend?period=6%20Bulan&time_zone=Asia%2FMakassar"
+    )
+    distribution_response = client.get("/api/v1/detections/distribution-by-block")
+
+    assert history["total"] == 4
+    persisted_mature = next(
+        item for item in created if item["maturity_class"] == "Mature"
+    )
+    assert any(item["id"] == persisted_mature["detection_id"] for item in history["items"])
+
+    assert stats_response.status_code == 200
+    stats = stats_response.json()
+    assert stats["total_detections"] == 4
+    assert stats["mature_count"] == 1
+    assert stats["immature_count"] == 1
+    assert stats["overmature_count"] == 1
+    assert stats["unknown_maturity_count"] == 1
+
+    assert trend_response.status_code == 200
+    trend = trend_response.json()
+    assert trend["total_in_range"] == 4
+    today = datetime.now(timezone.utc).astimezone(
+        ZoneInfo("Asia/Makassar")
+    ).strftime("%Y-%m-%d")
+    today_bucket = next(
+        bucket for bucket in trend["trend"] if bucket["label"] == today
+    )
+    assert today_bucket["counts"]["Mature"] == 1
+    assert today_bucket["counts"]["Unsupported"] == 1
+    for response, expected_buckets in (
+        (hourly_trend_response, 8),
+        (monthly_trend_response, 10),
+        (six_month_trend_response, 6),
+    ):
+        assert response.status_code == 200
+        period_data = response.json()
+        assert period_data["total_in_range"] == 4
+        assert len(period_data["trend"]) == expected_buckets
+
+    assert distribution_response.status_code == 200
+    distribution = distribution_response.json()
+    blocks = {block["block_name"]: block for block in distribution["blocks"]}
+    assert blocks["Blok A"]["counts"]["Mature"] == 1
+    assert blocks["Blok A"]["counts"]["Unsupported"] == 1
+    assert blocks["Blok Umum"]["counts"]["Overmature"] == 1
+    assert distribution["total_with_blocks"] == 3
+    assert distribution["no_block_count"] == 1
+    assert distribution["total_detections"] == 4
+
+
+def test_dashboard_aggregates_return_successful_empty_results(isolated_db_and_storage):
+    stats_response = client.get("/api/v1/detections/stats")
+    hourly_trend_response = client.get(
+        "/api/v1/detections/trend?period=24%20Jam&time_zone=Asia%2FMakassar"
+    )
+    trend_response = client.get(
+        "/api/v1/detections/trend?period=7%20Hari&time_zone=Asia%2FMakassar"
+    )
+    monthly_trend_response = client.get(
+        "/api/v1/detections/trend?period=30%20Hari&time_zone=Asia%2FMakassar"
+    )
+    six_month_trend_response = client.get(
+        "/api/v1/detections/trend?period=6%20Bulan&time_zone=Asia%2FMakassar"
+    )
+    distribution_response = client.get("/api/v1/detections/distribution-by-block")
+
+    assert stats_response.status_code == 200
+    assert stats_response.json()["total_detections"] == 0
+    assert hourly_trend_response.status_code == 200
+    assert len(hourly_trend_response.json()["trend"]) == 8
+    assert trend_response.status_code == 200
+    assert trend_response.json()["total_in_range"] == 0
+    assert len(trend_response.json()["trend"]) == 7
+    assert monthly_trend_response.status_code == 200
+    assert len(monthly_trend_response.json()["trend"]) == 10
+    assert six_month_trend_response.status_code == 200
+    assert len(six_month_trend_response.json()["trend"]) == 6
+    assert distribution_response.status_code == 200
+    assert distribution_response.json()["blocks"] == []
+    assert distribution_response.json()["no_block_count"] == 0
+    assert distribution_response.json()["total_detections"] == 0

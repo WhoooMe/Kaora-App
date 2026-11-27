@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../ui.jsx";
 import { Head } from "./shared.jsx";
 import {
@@ -18,6 +18,11 @@ const MATURITY_LABEL_ID = {
   Immature: "Belum matang",
   Mature: "Matang",
   Overmature: "Lewat matang",
+};
+const FILTER_LABEL_ID = {
+  Immature: "Mentah",
+  Mature: "Matang",
+  Overmature: "Terlalu matang",
 };
 
 function formatDateTime(isoString) {
@@ -152,12 +157,30 @@ const RiwayatPage = ({ go }) => {
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
-  const [classFilter, setClassFilter] = useState("ALL");
+  const [classFilters, setClassFilters] = useState([]);
+  const [classFilterOpen, setClassFilterOpen] = useState(false);
+  const classFilterRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState(null);
   const [detail, setDetail] = useState(null);
+
+  useEffect(() => {
+    if (!classFilterOpen) return undefined;
+    const closeOnOutsideClick = (event) => {
+      if (!classFilterRef.current?.contains(event.target)) setClassFilterOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setClassFilterOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [classFilterOpen]);
 
   const fetchHistory = useCallback(async () => {
     setLoading(true);
@@ -203,9 +226,16 @@ const RiwayatPage = ({ go }) => {
   };
   const openRecord = (id) => setSelectedDetectionId(id);
   const filteredItems = useMemo(
-    () => classFilter === "ALL" ? items : items.filter((item) => item.maturity_class === classFilter),
-    [items, classFilter],
+    () => classFilters.length === 0
+      ? items
+      : items.filter((item) => classFilters.includes(item.maturity_class)),
+    [items, classFilters],
   );
+  const toggleClassFilter = (maturityClass) => {
+    setClassFilters((current) => current.includes(maturityClass)
+      ? current.filter((value) => value !== maturityClass)
+      : [...current, maturityClass]);
+  };
   const hasPrev = offset > 0;
   const hasNext = offset + PAGE_LIMIT < total;
   const pageNumber = Math.floor(offset / PAGE_LIMIT) + 1;
@@ -222,7 +252,15 @@ const RiwayatPage = ({ go }) => {
       </Head>
 
       <div className="history-overview" aria-live="polite">
-        <div><span className="history-eyebrow">ARSIP PEMERIKSAAN</span><strong>{loading && total === 0 ? "—" : total.toLocaleString("id-ID")}</strong><span>catatan tersimpan</span></div>
+        <div className="history-overview-summary">
+          <div className="history-overview-labels">
+            <span className="history-eyebrow">ARSIP PEMERIKSAAN</span>
+            <span>catatan tersimpan</span>
+          </div>
+          <strong className="history-overview-total">
+            {loading && total === 0 ? "—" : total.toLocaleString("id-ID")}
+          </strong>
+        </div>
         <p>Data dimuat langsung dari riwayat backend KAORA.</p>
       </div>
 
@@ -243,10 +281,62 @@ const RiwayatPage = ({ go }) => {
           <div className="history-list-heading">
             <div><span className="history-eyebrow">CATATAN TERBARU</span><h2 id="history-list-title">Pemeriksaan tersimpan</h2><p>Menampilkan {rangeStart}–{rangeEnd} dari {total.toLocaleString("id-ID")} catatan</p></div>
             <div className="history-filter" aria-label="Filter kelas pada halaman ini">
-              <span>Filter halaman ini</span>
-              <div role="group" aria-label="Filter kelas kematangan">
-                {[{ key: "ALL", label: "Semua" }, ...CLASSES.map((key) => ({ key, label: MATURITY_LABEL_ID[key] }))].map((option) => (
-                  <button key={option.key} type="button" className={classFilter === option.key ? "is-active" : ""} aria-pressed={classFilter === option.key} onClick={() => setClassFilter(option.key)}>{option.label}</button>
+              <div className="history-filter-dropdown" ref={classFilterRef}>
+                <button
+                  className="history-filter-trigger"
+                  type="button"
+                  aria-haspopup="true"
+                  aria-expanded={classFilterOpen}
+                  aria-label={classFilterOpen ? "Tutup filter kelas" : "Buka filter kelas"}
+                  onClick={() => setClassFilterOpen((open) => !open)}
+                >
+                  <Icon n="filter" s={18} />
+                </button>
+                {classFilterOpen && (
+                  <div className="history-filter-menu" role="group" aria-label="Pilih kelas kematangan">
+                    <button
+                      type="button"
+                      className={`history-filter-option${classFilters.length === 0 ? " is-active" : ""}`}
+                      aria-pressed={classFilters.length === 0}
+                      onClick={() => {
+                        setClassFilters([]);
+                        setClassFilterOpen(false);
+                      }}
+                    >
+                      <span className="history-filter-check">{classFilters.length === 0 && <Icon n="check" s={13} />}</span>
+                      Semua
+                    </button>
+                    {CLASSES.map((maturityClass) => {
+                      const selected = classFilters.includes(maturityClass);
+                      return (
+                        <button
+                          key={maturityClass}
+                          type="button"
+                          className={`history-filter-option${selected ? " is-active" : ""}`}
+                          aria-pressed={selected}
+                          onClick={() => toggleClassFilter(maturityClass)}
+                        >
+                          <span className="history-filter-check">{selected && <Icon n="check" s={13} />}</span>
+                          {FILTER_LABEL_ID[maturityClass]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              <div className="history-filter-selections" aria-label="Filter aktif">
+                {classFilters.length === 0 ? (
+                  <span className="history-filter-all">Semua</span>
+                ) : classFilters.map((maturityClass) => (
+                  <button
+                    className="history-filter-chip"
+                    key={maturityClass}
+                    type="button"
+                    aria-label={`Hapus filter ${FILTER_LABEL_ID[maturityClass]}`}
+                    onClick={() => toggleClassFilter(maturityClass)}
+                  >
+                    {FILTER_LABEL_ID[maturityClass]} <Icon n="x" s={13} />
+                  </button>
                 ))}
               </div>
             </div>
@@ -262,7 +352,7 @@ const RiwayatPage = ({ go }) => {
                     <td><button className="history-record-link" type="button" onClick={() => openRecord(row.id)} title={`Buka detail ${row.id}`}><span className="history-record-time">{formatDateTime(row.created_at)}</span><span className="history-id">{row.id || "ID tidak tersedia"}</span></button></td>
                     <td>{row.block_name || <span className="history-muted">Belum ditentukan</span>}</td>
                     <td><div className="history-table-status"><VerificationBadge verified={row.verified} />{typeof row.cocoa_probability === "number" ? <small>Probabilitas kakao {percent(row.cocoa_probability)}</small> : <small>Probabilitas kakao tidak tersedia</small>}</div></td>
-                    <td><div className="history-table-status"><MaturityBadge record={row} /><small>{row.maturity_class || "Kelas tidak tersedia"}</small></div></td>
+                    <td><div className="history-table-status"><MaturityBadge record={row} /></div></td>
                     <td><strong className="history-confidence">{percent(row.confidence)}</strong></td>
                     <td><SecondaryButton className="history-detail-button" onClick={() => openRecord(row.id)}>Lihat detail</SecondaryButton></td>
                   </tr>
@@ -276,7 +366,7 @@ const RiwayatPage = ({ go }) => {
             {filteredItems.map((row) => (
               <article className="history-mobile-record" key={row.id}>
                 <div className="history-mobile-record-top"><MaturityBadge record={row} /><span>{formatDateTime(row.created_at)}</span></div>
-                <button className="history-record-link" type="button" onClick={() => openRecord(row.id)} title={`Buka detail ${row.id}`}><strong>{row.maturity_class || "Kelas tidak tersedia"}</strong><span className="history-id">{row.id || "ID tidak tersedia"}</span></button>
+                <button className="history-record-link" type="button" onClick={() => openRecord(row.id)} title={`Buka detail ${row.id}`}><span className="history-id">{row.id || "ID tidak tersedia"}</span></button>
                 <div className="history-mobile-meta"><span>{row.block_name || "Belum ditentukan"}</span><VerificationBadge verified={row.verified} /></div>
                 <div className="history-mobile-values"><span>Classifier <strong>{percent(row.confidence)}</strong></span><span>Kakao <strong>{percent(row.cocoa_probability)}</strong></span></div>
                 <SecondaryButton onClick={() => openRecord(row.id)}>Lihat detail</SecondaryButton>
